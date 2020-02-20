@@ -1,0 +1,15 @@
+[package]
+name = "bitregions"
+version = "0.1.0"
+authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+bitflags = "^1.2.1"
+proc-macro-hack = "^0.5.11"
+bitregions-impl = { version = "0.1.0", path = "./impl" }
+
+[workspace]
+members = [
+    "./impl",
+]
