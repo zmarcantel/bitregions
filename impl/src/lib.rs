@@ -10,11 +10,31 @@ extern crate proc_macro;
 extern crate quote;
 
 
+/// Wrapper type for the visibility of the generated struct
+/// and the parsed syntax defining the regions.
 struct BitRegions {
     vis: Option<syn::token::Pub>,
     struct_def: Struct,
 }
 
+impl syn::parse::Parse for BitRegions {
+    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
+        let vis = if input.peek(syn::token::Pub) {
+            Some(input.parse()?)
+        } else {
+            None
+        };
+
+        let struct_def: Struct = input.parse()?;
+
+        Ok(BitRegions{
+            vis: vis,
+            struct_def,
+        })
+    }
+}
+
+/// Holds the identitiy, numeric type representation, and regions.
 struct Struct {
     ident: syn::Ident,
     repr: syn::Type,
@@ -23,24 +43,21 @@ struct Struct {
 
 impl syn::parse::Parse for Struct {
     fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        let content;
-
+        // grab the identity and "C" representation
         let ident: syn::Ident = input.parse()?;
         let repr: syn::Type = input.parse()?;
 
+        // extract everything wrapped in the braces
+        // also collect a region per parsed field
+        let content;
         let _: syn::token::Brace = syn::braced!(content in input);
         let fields = content.parse_terminated(Field::parse)?;
         let regions = fields.iter().map(|f| f.region.clone())
             .collect::<Vec<Region>>();
 
+        // check for intersections
         for (i, r) in regions.iter().enumerate() {
-            // check for gaps
-            if r.has_gaps() {
-                return Err(syn::Error::new(
-                    r.lit.span(), "region cannot contain gap(s)"));
-            }
-
-            // also check for intersections
+            // check all entries we haven't been checked against
             for k in (i+1)..regions.len() {
                 let other = &regions[k];
 
@@ -67,17 +84,17 @@ impl syn::parse::Parse for Struct {
 }
 
 
+/// Syntax representation of a region with a name and bit-region.
 struct Field {
     name: syn::Ident,
     lower_name: syn::Ident,
     region: Region,
 }
 impl Field {
+    /// Generate the operations on this field.
     pub fn gen_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
         -> quote::__rt::TokenStream
     {
-
-
         if self.region.len() == 1 {
             self.gen_single_bit_ops(struct_name)
         } else {
@@ -85,6 +102,22 @@ impl Field {
         }
     }
 
+    /// Generate the Display printer for this field.
+    /// Should push to a Vec variable named result.
+    pub fn gen_display(&self) -> quote::__rt::TokenStream {
+        let name = &self.name;
+        let lower = &self.lower_name;
+        if self.region.len() == 1 {
+            quote! { if self.#lower() { result.push(stringify!(#name).to_string()); } }
+        } else {
+            quote! {
+                result.push(format!("{}={:#X}", stringify!(#name), self.#lower()));
+            }
+        }
+    }
+
+    /// Generates methods to operate on single-bit regions.
+    /// Setter methods do not take values and includes a toggle method.
     fn gen_single_bit_ops(&self, struct_name: &syn::Ident)
         -> quote::__rt::TokenStream
     {
@@ -123,6 +156,9 @@ impl Field {
         }
     }
 
+    /// Generates methods to operate on multi-bit regions.
+    /// Setter methods take values and include debug_assert! calls for both
+    /// bit-region as well as the optional value-range.
     fn gen_region_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
         -> quote::__rt::TokenStream
     {
@@ -141,12 +177,19 @@ impl Field {
             "attempted to set {}::{} with value outside of range ({{:?}}): {{:#X}}",
             struct_name, self.name);
         let range_check = self.region.range.as_ref().map(|ref e| quote! {
-                debug_assert!((#e).contains(&v), #range_assert, (#e), v);
+                debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
         });
+
+        let (upshift, downshift) = if self.region.shift_offset() > 0 {
+            (Some(quote!{ << #shift_offset }),
+             Some(quote!{ >> #shift_offset }))
+        } else {
+            (None, None)
+        };
 
         let getters = quote! {
             pub fn #lower(&self) -> #repr {
-                (self.0 & #struct_name::#mask) >> #shift_offset
+                (self.0 & #struct_name::#mask) #downshift
             }
             pub fn #extract(&self) -> #struct_name {
                 #struct_name(self.0 & #struct_name::#mask)
@@ -154,14 +197,15 @@ impl Field {
         };
 
         let setters = quote! {
-            pub fn #set<T: Into<#repr>>(&mut self, val: T) {
-                let v = val.into() << #shift_offset;
-                debug_assert!(v & #struct_name::#mask == v, #value_assert, v);
+            pub fn #set<T: Into<#repr>>(&mut self, raw: T) {
+                let typed: #repr = raw.into();
+                let val: #repr = (typed #upshift) as #repr;
                 #range_check
+                debug_assert!(val & #struct_name::#mask == val, #value_assert, val);
 
                 let mut tmp: #repr = self.0 & (!#struct_name::#mask);
                 // TODO: may not be able to write entire word (allow slicing?)
-                self.0 = tmp | v;
+                self.0 = tmp | val;
             }
         };
 
@@ -178,12 +222,21 @@ impl syn::parse::Parse for Field {
         let lower_str = format!("{}", name).trim().to_lowercase();
         let lower_name = syn::Ident::new(&lower_str, name.span());
         let _: syn::Token![:] = input.parse()?;
-        let region = input.parse()?;
+        let region: Region = input.parse()?;
+
+        // check for gaps
+        if region.has_gaps() {
+            return Err(syn::Error::new(
+                region.lit.span(), "region cannot contain gap(s)"));
+        }
 
         Ok(Field { name, lower_name, region })
     }
 }
 
+
+/// Region contains metadata about a bit-region including the literal
+/// expression, the mask, and a range if defined.
 #[derive(Clone)]
 struct Region {
     lit: syn::LitInt,
@@ -191,22 +244,27 @@ struct Region {
     range: Option<syn::ExprRange>,
 }
 impl Region {
+    /// Minimum number of bits needed to represent the mask literal
     pub fn min_value_bits(&self) -> usize {
         (std::mem::size_of::<usize>()*8) - (self.value.leading_zeros() as usize) - 1
     }
 
+    /// Number of bits in the region
     pub fn len(&self) -> usize {
         self.value.count_ones() as usize
     }
 
+    /// Offset required to shift "1" to the least significant bit in the region
     pub fn shift_offset(&self) -> usize {
         self.value.trailing_zeros() as usize
     }
 
+    /// Check if the defined mask contains gaps
     pub fn has_gaps(&self) -> bool {
         (self.len() + self.shift_offset() - 1) != self.min_value_bits()
     }
 
+    /// Check if this region intersects with another
     pub fn intersects(&self, other: &Self) -> bool {
         let self_min = self.shift_offset();
         let self_max = self_min + self.len() - 1;
@@ -243,23 +301,6 @@ impl syn::parse::Parse for Region {
     }
 }
 
-impl syn::parse::Parse for BitRegions {
-    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        let vis = if input.peek(syn::token::Pub) {
-            Some(input.parse()?)
-        } else {
-            None
-        };
-
-        let struct_def: Struct = input.parse()?;
-
-        Ok(BitRegions{
-            vis: vis,
-            struct_def,
-        })
-    }
-}
-
 
 #[proc_macro]
 pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -268,19 +309,28 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let name = &input.struct_def.ident;
     let repr = &input.struct_def.repr;
 
+    // create token streams for the const-defs of the masks
     let mask_defs = input.struct_def.fields.iter().map(|f| {
         let val = &f.region.lit;
         let mask = &f.name;
         quote! { const #mask: #repr = #val; }
     }).collect::<Vec<quote::__rt::TokenStream>>();
 
+    // generate token streams for the methods
     let mask_ops = input.struct_def.fields.iter().map(|f| f.gen_ops(name, repr))
         .collect::<Vec<quote::__rt::TokenStream>>();
 
+    // generate token streams for the field Display impls
+    let display_ops = input.struct_def.fields.iter().map(|f| f.gen_display())
+        .collect::<Vec<quote::__rt::TokenStream>>();
+
+    // make display and debug impls
     let display_debug = quote! {
         impl std::fmt::Display for #name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{:?}", self)
+                let mut result: Vec<String> = vec!();
+                #( #display_ops )*
+                write!(f, "{}", result.join(" | "))
             }
         }
 
