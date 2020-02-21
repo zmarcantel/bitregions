@@ -12,7 +12,7 @@ mod test {
 
     bitregions! {
         pub Test u16 {
-            LOW_REGION:     0b00000111,
+            LOW_REGION:     0b00000111 | 0..=5u16,
             HIGH_REGION:    0b00011000,
             HIGH_TOGGLE:    0b01000000,
         }
@@ -38,6 +38,11 @@ mod test {
             GAP:    0b00101000,
         }
     }
+    bitregions! {
+        pub TestMultGap u16 {
+            GAP:    0b00101010,
+        }
+    }
     */
 
     #[test]
@@ -49,8 +54,8 @@ mod test {
         assert!(5 == test.low_region());
         test.set_low_region(2u8);
         assert!(2 == test.low_region());
-        test.set_low_region(7u8);
-        assert!(7 == test.low_region());
+        test.set_low_region(4u8);
+        assert!(4 == test.low_region());
         test.set_low_region(0u8);
         assert!(0 == test.low_region());
     }
@@ -60,6 +65,13 @@ mod test {
     fn set_beyond_low_region() {
         let mut test = Test::from(0);
         test.set_low_region(8u8);
+    }
+
+    #[test]
+    #[should_panic]
+    fn set_low_region_outside_range() {
+        let mut test = Test::from(0);
+        test.set_low_region(6u8);
     }
 
     #[test]
@@ -81,7 +93,6 @@ mod test {
         let mut test = Test::from(0);
         test.set_high_region(4u8);
     }
-
 
     #[test]
     fn toggle() {

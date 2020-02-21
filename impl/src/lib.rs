@@ -37,7 +37,7 @@ impl syn::parse::Parse for Struct {
             // check for gaps
             if r.has_gaps() {
                 return Err(syn::Error::new(
-                    r.bits.span(), "region cannot contain gap(s)"));
+                    r.lit.span(), "region cannot contain gap(s)"));
             }
 
             // also check for intersections
@@ -46,11 +46,11 @@ impl syn::parse::Parse for Struct {
 
                 if r.intersects(other) {
                     let oth_err = syn::Error::new(
-                        other.bits.span(), "other region");
+                        other.lit.span(), "other region");
                     let mut err = syn::Error::new(
-                        r.bits.span(),
+                        r.lit.span(),
                         format!("0b{:b} intersected by other region 0b{:b}",
-                            r.literal, other.literal),
+                            r.value, other.value),
                     );
                     err.combine(oth_err);
                     return Err(err);
@@ -137,6 +137,13 @@ impl Field {
             "attempted to set {}::{} with value outside of region: {{:#X}}",
             struct_name, self.name);
 
+        let range_assert = format!(
+            "attempted to set {}::{} with value outside of range ({{:?}}): {{:#X}}",
+            struct_name, self.name);
+        let range_check = self.region.range.as_ref().map(|ref e| quote! {
+                debug_assert!((#e).contains(&v), #range_assert, (#e), v);
+        });
+
         let getters = quote! {
             pub fn #lower(&self) -> #repr {
                 (self.0 & #struct_name::#mask) >> #shift_offset
@@ -149,7 +156,8 @@ impl Field {
         let setters = quote! {
             pub fn #set<T: Into<#repr>>(&mut self, val: T) {
                 let v = val.into() << #shift_offset;
-                assert!(v & #struct_name::#mask == v, #value_assert, v);
+                debug_assert!(v & #struct_name::#mask == v, #value_assert, v);
+                #range_check
 
                 let mut tmp: #repr = self.0 & (!#struct_name::#mask);
                 // TODO: may not be able to write entire word (allow slicing?)
@@ -171,30 +179,32 @@ impl syn::parse::Parse for Field {
         let lower_name = syn::Ident::new(&lower_str, name.span());
         let _: syn::Token![:] = input.parse()?;
         let region = input.parse()?;
+
         Ok(Field { name, lower_name, region })
     }
 }
 
 #[derive(Clone)]
 struct Region {
-    bits: syn::LitInt,
-    literal: usize,
+    lit: syn::LitInt,
+    value: usize,
+    range: Option<syn::ExprRange>,
 }
 impl Region {
-    pub fn min_bits(&self) -> usize {
-        (std::mem::size_of::<usize>()*8) - (self.literal.leading_zeros() as usize) - 1
+    pub fn min_value_bits(&self) -> usize {
+        (std::mem::size_of::<usize>()*8) - (self.value.leading_zeros() as usize) - 1
     }
 
     pub fn len(&self) -> usize {
-        self.literal.count_ones() as usize
+        self.value.count_ones() as usize
     }
 
     pub fn shift_offset(&self) -> usize {
-        self.literal.trailing_zeros() as usize
+        self.value.trailing_zeros() as usize
     }
 
     pub fn has_gaps(&self) -> bool {
-        (self.len() + self.shift_offset() - 1) != self.min_bits()
+        (self.len() + self.shift_offset() - 1) != self.min_value_bits()
     }
 
     pub fn intersects(&self, other: &Self) -> bool {
@@ -216,11 +226,19 @@ impl Region {
 
 impl syn::parse::Parse for Region {
     fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        let bits: syn::LitInt = input.parse()?;
-        let literal = bits.base10_digits().parse().expect("failed to parse literal");
+        let lit: syn::LitInt = input.parse()?;
+        let value = lit.base10_digits().parse().expect("failed to parse literal");
+
+        let mut range = None;
+        if input.peek(syn::Token![|]) {
+            let _: syn::Token![|] = input.parse()?;
+            range = Some(input.parse()?);
+        }
+
         Ok(Region {
-            bits,
-            literal,
+            lit,
+            value,
+            range,
         })
     }
 }
@@ -251,7 +269,7 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let repr = &input.struct_def.repr;
 
     let mask_defs = input.struct_def.fields.iter().map(|f| {
-        let val = &f.region.bits;
+        let val = &f.region.lit;
         let mask = &f.name;
         quote! { const #mask: #repr = #val; }
     }).collect::<Vec<quote::__rt::TokenStream>>();
