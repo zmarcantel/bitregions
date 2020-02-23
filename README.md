@@ -1,6 +1,9 @@
 bitregions
 ============
 
+[![docs.rs/bitregions](https://docs.rs/bitregions/badge.svg)](https://docs.rs/bitregions)
+[![Build Status](https://travis-ci.org/zmarcantel/bitregions.svg?branch=master)](https://travis-ci.org/zmarcantel/bitregions)
+
 Generate a unit structure to represent a set of bit-regions.
 Intended to be used both as bitflags held in structs/collections as well
 as representing something like a memory-mapped register in more embedded
