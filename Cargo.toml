@@ -2,6 +2,7 @@
 name = "bitregions"
 version = "0.1.0"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
+decription = "Generate a unit structure to represent a set of bit-regions."
 edition = "2018"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/zmarcantel/bitregions"
