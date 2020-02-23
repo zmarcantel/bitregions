@@ -39,7 +39,7 @@ Basic Example:
 Example purely to show the API.
 Creates a stack-based u16 unit-struct with helper methods.
 
-```
+```rust
 # #[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 {
@@ -128,7 +128,7 @@ region this register would represent.
 You can optionally provide a default address location using the
 `{name} {repr} @ {addr}` syntax. This variant returns a static, mutable ref.
 
-```
+```rust
 # #[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 @ 0xDEADBEEF {
@@ -192,7 +192,7 @@ type to our generated struct. This allows you to "add features" to a raw
 value. While safer than the memory-mapped example but is still unsafe code
 as you could share a reference into a slice.
 
-```
+```rust
 # #[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 {
@@ -233,7 +233,7 @@ When built in debug-mode, setters will assert the given value
 both fits in the region (4bit number in 2bit region) and is within
 the (optional) range (3bit region, 0-5 allowed, given 7).
 
-```should_panic
+```rust
 # #[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u8 {
