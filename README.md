@@ -52,6 +52,13 @@ bitregions! {
         BUSY:         0b0000000001000000,
         VAL_BUFFER:   0b1111111100000000,
     }
+
+    pub fn port_and_value(port: u8, val: u8) -> Example {
+        let mut r = Example::new(0u16);
+        r.set_port_num(port);
+        r.set_val_buffer(val);
+        r
+    }
 }
 
 fn main() {
@@ -73,9 +80,8 @@ fn main() {
 
     // set the port to write to. must be 0-5
     // otherwise we trigger a debug_assert! (removed in release builds)
-    ex.set_port_num(4u8);
-    // put the value into the buffer
-    ex.set_val_buffer(0x38u8);
+    // same with the value buffer
+    ex |= Example::port_and_value(4u8, 0x38u8);
     // clear busy bit (could be more pedantic with ex.unset_busy())
     ex.toggle_busy();
 
@@ -108,8 +114,7 @@ fn main() {
     // display and debug
     //
 
-    ex = Example::new(0u16);
-    ex.set_en_feature();
+    ex = Example::with_en_feature(); // use a with_{field} ctor
     ex.set_port_num(4u8);
     ex.set_val_buffer(0xABu8);
     let display = format!("{}", ex);

@@ -76,6 +76,7 @@
 ///
 ///     // set the port to write to. must be 0-5
 ///     // otherwise we trigger a debug_assert! (removed in release builds)
+///     // same with the value buffer
 ///     ex |= Example::port_and_value(4u8, 0x38u8);
 ///     // clear busy bit (could be more pedantic with ex.unset_busy())
 ///     ex.toggle_busy();
@@ -109,8 +110,7 @@
 ///     // display and debug
 ///     //
 ///
-///     ex = Example::new(0u16);
-///     ex.set_en_feature();
+///     ex = Example::with_en_feature(); // use a with_{field} ctor
 ///     ex.set_port_num(4u8);
 ///     ex.set_val_buffer(0xABu8);
 ///     let display = format!("{}", ex);
