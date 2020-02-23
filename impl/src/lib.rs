@@ -509,90 +509,90 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // add
         //
-        impl core::ops::Add for #name {
+        impl<T: Into<#repr>> core::ops::Add<T> for #name {
             type Output = Self;
-            fn add(self, other: Self) -> Self::Output {
-                #name(self.0 + other.0)
+            fn add(self, other: T) -> Self::Output {
+                #name(self.0 + other.into())
             }
         }
-        impl core::ops::AddAssign for #name {
-            fn add_assign(&mut self, other: Self) {
-                self.0 += other.0;
+        impl<T: Into<#repr>> core::ops::AddAssign<T> for #name {
+            fn add_assign(&mut self, other: T) {
+                self.0 += other.into();
             }
         }
 
         //
         // sub
         //
-        impl core::ops::Sub for #name {
+        impl<T: Into<#repr>> core::ops::Sub<T> for #name {
             type Output = Self;
-            fn sub(self, other: Self) -> Self::Output {
-                #name(self.0 - other.0)
+            fn sub(self, other: T) -> Self::Output {
+                #name(self.0 - other.into())
             }
         }
-        impl core::ops::SubAssign for #name {
-            fn sub_assign(&mut self, other: Self) {
-                self.0 -= other.0;
+        impl<T: Into<#repr>> core::ops::SubAssign<T> for #name {
+            fn sub_assign(&mut self, other: T) {
+                self.0 -= other.into();
             }
         }
 
         //
         // mul
         //
-        impl core::ops::Mul for #name {
+        impl<T: Into<#repr>> core::ops::Mul<T> for #name {
             type Output = Self;
-            fn mul(self, other: Self) -> Self::Output {
-                #name(self.0 * other.0)
+            fn mul(self, other: T) -> Self::Output {
+                #name(self.0 * other.into())
             }
         }
-        impl core::ops::MulAssign for #name {
-            fn mul_assign(&mut self, other: Self) {
-                self.0 *= other.0;
+        impl<T: Into<#repr>> core::ops::MulAssign<T> for #name {
+            fn mul_assign(&mut self, other: T) {
+                self.0 *= other.into();
             }
         }
 
         //
         // div
         //
-        impl core::ops::Div for #name {
+        impl<T: Into<#repr>> core::ops::Div<T> for #name {
             type Output = Self;
-            fn div(self, other: Self) -> Self::Output {
-                #name(self.0 / other.0)
+            fn div(self, other: T) -> Self::Output {
+                #name(self.0 / other.into())
             }
         }
-        impl core::ops::DivAssign for #name {
-            fn div_assign(&mut self, other: Self) {
-                self.0 /= other.0;
+        impl<T: Into<#repr>> core::ops::DivAssign<T> for #name {
+            fn div_assign(&mut self, other: T) {
+                self.0 /= other.into();
             }
         }
 
         //
         // bitor
         //
-        impl core::ops::BitOr for #name {
+        impl<T: Into<#repr>> core::ops::BitOr<T> for #name {
             type Output = Self;
-            fn bitor(self, other: Self) -> Self::Output {
-                #name(self.0 | other.0)
+            fn bitor(self, other: T) -> Self::Output {
+                #name(self.0 | other.into())
             }
         }
-        impl core::ops::BitOrAssign for #name {
-            fn bitor_assign(&mut self, other: Self) {
-                self.0 |= other.0;
+        impl<T: Into<#repr>> core::ops::BitOrAssign<T> for #name {
+            fn bitor_assign(&mut self, other: T) {
+                self.0 |= other.into();
             }
         }
 
         //
         // bitand
         //
-        impl core::ops::BitAnd for #name {
+        impl<T: Into<#repr>> core::ops::BitAnd<T> for #name {
             type Output = Self;
-            fn bitand(self, other: Self) -> Self::Output {
-                #name(self.0 & other.0)
+            fn bitand(self, other: T) -> Self::Output {
+                #name(self.0 & other.into())
             }
         }
-        impl core::ops::BitAndAssign for #name {
-            fn bitand_assign(&mut self, other: Self) {
-                self.0 &= other.0;
+        impl<T: Into<#repr>> core::ops::BitAndAssign<T> for #name {
+            fn bitand_assign(&mut self, other: T) {
+                self.0 &= other.into();
             }
         }
 
@@ -600,45 +600,45 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // bitxor
         //
-        impl core::ops::BitXor for #name {
+        impl<T: Into<#repr>> core::ops::BitXor<T> for #name {
             type Output = Self;
-            fn bitxor(self, other: Self) -> Self::Output {
-                #name(self.0 ^ other.0)
+            fn bitxor(self, other: T) -> Self::Output {
+                #name(self.0 ^ other.into())
             }
         }
-        impl core::ops::BitXorAssign for #name {
-            fn bitxor_assign(&mut self, other: Self) {
-                self.0 ^= other.0;
+        impl<T: Into<#repr>> core::ops::BitXorAssign<T> for #name {
+            fn bitxor_assign(&mut self, other: T) {
+                self.0 ^= other.into();
             }
         }
 
         //
         // shr
         //
-        impl core::ops::Shr for #name {
+        impl<T: Into<#repr>> core::ops::Shr<T> for #name {
             type Output = Self;
-            fn shr(self, other: Self) -> Self::Output {
-                #name(self.0 >> other.0)
+            fn shr(self, other: T) -> Self::Output {
+                #name(self.0 >> other.into())
             }
         }
-        impl core::ops::ShrAssign for #name {
-            fn shr_assign(&mut self, other: Self) {
-                self.0 >>= other.0;
+        impl<T: Into<#repr>> core::ops::ShrAssign<T> for #name {
+            fn shr_assign(&mut self, other: T) {
+                self.0 >>= other.into();
             }
         }
 
         //
         // shl
         //
-        impl core::ops::Shl for #name {
+        impl<T: Into<#repr>> core::ops::Shl<T> for #name {
             type Output = Self;
-            fn shl(self, other: Self) -> Self::Output {
-                #name(self.0 << other.0)
+            fn shl(self, other: T) -> Self::Output {
+                #name(self.0 << other.into())
             }
         }
-        impl core::ops::ShlAssign for #name {
-            fn shl_assign(&mut self, other: Self) {
-                self.0 <<= other.0;
+        impl<T: Into<#repr>> core::ops::ShlAssign<T> for #name {
+            fn shl_assign(&mut self, other: T) {
+                self.0 <<= other.into();
             }
         }
     };

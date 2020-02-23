@@ -98,13 +98,13 @@
 ///     // math and bitwise operations
 ///     //
 ///
-///     ex += 1u16.into();
-///     ex -= 1u16.into();
-///     ex *= 2u16.into();
-///     ex /= 2u16.into();
-///     ex |= 0xBD.into();
-///     ex &= 0xDB.into();
-///     ex ^= ex.raw().into();
+///     ex += 1u16;
+///     ex -= 1u16;
+///     ex *= 2u16;
+///     ex /= 2u16;
+///     ex |= 0xBDu8;
+///     ex &= 0xDBu8;
+///     ex ^= ex;
 ///
 ///     //
 ///     // display and debug
