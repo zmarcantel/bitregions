@@ -15,6 +15,7 @@ extern crate quote;
 struct BitRegions {
     vis: Option<syn::token::Pub>,
     struct_def: Struct,
+    user_fns: UserFns,
 }
 
 impl syn::parse::Parse for BitRegions {
@@ -26,10 +27,12 @@ impl syn::parse::Parse for BitRegions {
         };
 
         let struct_def: Struct = input.parse()?;
+        let user_fns: UserFns = input.parse()?;
 
         Ok(BitRegions{
             vis: vis,
             struct_def,
+            user_fns,
         })
     }
 }
@@ -134,6 +137,31 @@ impl Field {
             self.gen_single_bit_ops(struct_name)
         } else {
             self.gen_region_ops(struct_name, repr)
+        }
+    }
+
+    /// Generate the "with_{name}" constructor
+    pub fn gen_with_ctor(&self, struct_name: &syn::Ident, repr: &syn::Type)
+        -> quote::__rt::TokenStream
+    {
+        let name = &self.name;
+        let lower = &self.lower_name;
+        let with_fn = format_ident!("with_{}", lower);
+        let set_call = format_ident!("set_{}", lower);
+        if self.region.len() == 1 {
+            quote! {
+                pub fn #with_fn() -> #struct_name {
+                    #struct_name::new(#struct_name::#name)
+                }
+            }
+        } else {
+            quote! {
+                pub fn #with_fn<T: Into<#repr>>(val: T) -> #struct_name {
+                    let mut r = #struct_name::new(0 as #repr);
+                    r.#set_call(val);
+                    r
+                }
+            }
         }
     }
 
@@ -342,18 +370,38 @@ impl syn::parse::Parse for Region {
 }
 
 
+struct UserFns {
+    fns: Vec<syn::ItemFn>,
+}
+
+impl syn::parse::Parse for UserFns {
+    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
+        let mut fns = vec!();
+
+        while input.peek(syn::token::Pub) || input.peek(syn::token::Fn) {
+            fns.push(input.parse()?);
+        }
+
+        Ok(UserFns {
+            fns,
+        })
+    }
+}
+
+
 #[proc_macro]
 pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as BitRegions);
     let vis = &input.vis;
     let name = &input.struct_def.ident;
     let repr = &input.struct_def.repr;
+    let user_fns = &input.user_fns.fns;
 
     // create token streams for the const-defs of the masks
     let mask_defs = input.struct_def.fields.iter().map(|f| {
         let val = &f.region.lit;
         let mask = &f.name;
-        quote! { const #mask: #repr = #val; }
+        quote! { pub const #mask: #repr = #val; }
     }).collect::<Vec<quote::__rt::TokenStream>>();
 
     // generate token stream for (optional) default
@@ -369,6 +417,10 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
     });
+
+    // generate token streams for the "with_{field}" constructors
+    let with_ctors = input.struct_def.fields.iter().map(|f| f.gen_with_ctor(name, repr))
+        .collect::<Vec<quote::__rt::TokenStream>>();
 
     // generate token streams for the methods
     let mask_ops = input.struct_def.fields.iter().map(|f| f.gen_ops(name, repr))
@@ -397,12 +449,17 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let result = quote! {
         #[repr(C)]
+        #[derive(Copy, Clone)]
         #vis struct #name(#repr);
 
         #display_debug
 
         impl #name {
             #(#mask_defs)*
+
+            pub fn raw(&self) -> #repr {
+                self.0
+            }
 
             pub fn new<T: Into<#repr>>(bits: T) -> #name {
                 #name(bits.into())
@@ -425,10 +482,10 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
 
             #default
+            #(#with_ctors)*
 
-            pub fn raw(&self) -> #repr {
-                self.0
-            }
+
+            #(#user_fns)*
 
             #(#mask_ops)*
         }
@@ -584,7 +641,6 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 self.0 <<= other.0;
             }
         }
-
     };
 
     result.into()

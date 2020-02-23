@@ -48,6 +48,13 @@
 ///         BUSY:         0b0000000001000000,
 ///         VAL_BUFFER:   0b1111111100000000,
 ///     }
+///
+///     pub fn port_and_value(port: u8, val: u8) -> Example {
+///         let mut r = Example::new(0u16);
+///         r.set_port_num(port);
+///         r.set_val_buffer(val);
+///         r
+///     }
 /// }
 ///
 /// fn main() {
@@ -69,9 +76,7 @@
 ///
 ///     // set the port to write to. must be 0-5
 ///     // otherwise we trigger a debug_assert! (removed in release builds)
-///     ex.set_port_num(4u8);
-///     // put the value into the buffer
-///     ex.set_val_buffer(0x38u8);
+///     ex |= Example::port_and_value(4u8, 0x38u8);
 ///     // clear busy bit (could be more pedantic with ex.unset_busy())
 ///     ex.toggle_busy();
 ///
@@ -266,6 +271,14 @@ mod test {
             HIGH_REGION:    0b00011000,
             HIGH_TOGGLE:    0b01000000,
         }
+
+
+        pub fn with_regions(high: u8, low: u8) -> Test {
+            let mut r = Test::new(0u16);
+            r.set_high_region(high);
+            r.set_low_region(low);
+            r
+        }
     }
 
     bitregions! {
@@ -313,6 +326,21 @@ mod test {
         }
     }
     */
+
+    #[test]
+    fn with_ctors() {
+        assert_eq!(Test::with_high_toggle(), Test::HIGH_TOGGLE.into());
+        assert_eq!(Test::with_low_region(4u8), Test::new(4u16));
+        assert_eq!(Test::with_high_region(3u8), Test::new(3u16 << 3));
+    }
+
+    #[test]
+    fn user_fns() {
+        let mut expect = Test::new(0u16);
+        expect.set_low_region(4u8);
+        expect.set_high_region(3u8);
+        assert_eq!(expect, Test::with_regions(3, 4));
+    }
 
     #[test]
     fn get_set_low_region() {
