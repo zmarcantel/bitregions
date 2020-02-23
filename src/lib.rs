@@ -4,7 +4,34 @@
 // for full license information.
 //
 
+#![no_std]
+
 /// Generate a unit structure to represent a set of bit-regions.
+/// Intended to be used both as bitflags held in structs/collections as well
+/// as representing something like a memory-mapped register in more embedded
+/// applications.
+///
+/// This crate is set as `#![no_std]` so it can freely be used in other such crates.
+///
+/// Regions are given the `#repr({type})` attribute based on the `{repr}`
+/// given to the macro.
+///
+/// The following traits are generated for the new struct:
+/// - `Into<{repr}>`
+/// - `From<{repr}>`
+/// - `PartialEq`
+/// - `Display`
+///     - toggles print their name if set
+///     - multibit always prints `{name}={val}`
+/// - `Debug`
+///     - prints raw value in hex
+/// - `+` and `+=`
+/// - `-` and `-=`
+/// - `*` and `*=`
+/// - `/` and `/=`
+/// - `^` and `^=`
+/// - `|` and `|=`
+/// - `&` and `&=`
 ///
 /// # Basic Example:
 ///
@@ -95,15 +122,30 @@
 /// Below is an example that creates a lifetimed reference to some memory
 /// region this register would represent.
 ///
+/// You can optionally provide a default address location using the
+/// `{name} {repr} @ {addr}` syntax. This variant returns a static, mutable ref.
+///
 /// ```
 /// # #[macro_use] extern crate bitregions;
 /// bitregions! {
-///     pub Example u16 {
+///     pub Example u16 @ 0xDEADBEEF {
 ///         EN_FEATURE:   0b0000000000000001,
 ///         EN_DEVICE:    0b0000000000000010,
 ///         PORT_NUM:     0b0000000000011100 | 0..=5, // only 0-5 is valid
 ///         BUSY:         0b0000000001000000,
 ///         VAL_BUFFER:   0b1111111100000000,
+///     }
+/// }
+///
+/// const MEMIO_ADDR: usize = 0xC0FFEE;
+/// bitregions! {
+///     pub MemIOBase u16 @ MEMIO_ADDR {
+///         SOME_REGION:  0b0000000000000001,
+///     }
+/// }
+/// bitregions! {
+///     pub ControlReg u16 @ MEMIO_ADDR + 0x80 {
+///         SOME_REGION:  0b0000000000000001,
 ///     }
 /// }
 ///
@@ -123,6 +165,17 @@
 ///     ex.set_val_buffer(128u8);
 ///     println!("{:#X}", ex.val_buffer());
 ///     assert_eq!(128, ex.val_buffer());
+///
+///     // you can also initialize the pointer directly
+///     let ptr = unsafe { Example::default_ptr() };
+///     assert_eq!(ptr as *mut _ as usize, 0xDEADBEEF);
+///     // but we cannot use it in the examples or it will segfault :/
+///
+///     // you can set the default address using a literal, ident, or const expression
+///     let memio = unsafe { MemIOBase::default_ptr() };
+///     assert_eq!(memio as *mut _ as usize, MEMIO_ADDR);
+///     let control = unsafe { ControlReg::default_ptr() };
+///     assert_eq!(control as *mut _ as usize, MEMIO_ADDR + 0x80);
 /// }
 /// ```
 ///
@@ -211,6 +264,25 @@ mod test {
         pub Test u16 {
             LOW_REGION:     0b00000111 | 0..=5u16,
             HIGH_REGION:    0b00011000,
+            HIGH_TOGGLE:    0b01000000,
+        }
+    }
+
+    bitregions! {
+        pub DefaultLitAddrTest u16 @ 0xC0FFEE {
+            HIGH_TOGGLE:    0b01000000,
+        }
+    }
+
+    const DEFAULT_ADDR_CONST: usize = 0xDEADBEEF;
+    bitregions! {
+        pub DefaultConstAddrTest u16 @ DEFAULT_ADDR_CONST {
+            HIGH_TOGGLE:    0b01000000,
+        }
+    }
+
+    bitregions! {
+        pub DefaultExprAddrTest u16 @ DEFAULT_ADDR_CONST + 0x80 {
             HIGH_TOGGLE:    0b01000000,
         }
     }
@@ -449,5 +521,23 @@ mod test {
         let mut shr_test = Test::new(8u16);
         shr_test >>= Test::new(3u16);
         assert_eq!(Test::new(1u16), shr_test);
+    }
+
+    #[test]
+    fn default_ptr_lit() {
+        let ptr = unsafe { DefaultLitAddrTest::default_ptr() };
+        assert_eq!(ptr as *mut _ as usize, 0xC0FFEE);
+    }
+
+    #[test]
+    fn default_ptr_ident() {
+        let ptr = unsafe { DefaultConstAddrTest::default_ptr() };
+        assert_eq!(ptr as *mut _ as usize, DEFAULT_ADDR_CONST);
+    }
+
+    #[test]
+    fn default_ptr_expr() {
+        let ptr = unsafe { DefaultExprAddrTest::default_ptr() };
+        assert_eq!(ptr as *mut _ as usize, DEFAULT_ADDR_CONST + 0x80);
     }
 }

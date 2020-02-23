@@ -34,10 +34,38 @@ impl syn::parse::Parse for BitRegions {
     }
 }
 
+/// The memory location to default initialize the region to.
+enum MemoryLocation {
+    Lit(syn::LitInt),
+    Ident(syn::Ident),
+    Expr(syn::ExprBinary),
+}
+
+impl syn::parse::Parse for MemoryLocation {
+    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
+        if !input.peek2(syn::token::Brace) {
+            return Ok(MemoryLocation::Expr(input.parse()?));
+        }
+
+        if input.peek(syn::Ident) {
+            return Ok(MemoryLocation::Ident(input.parse()?));
+        }
+        if input.peek(syn::LitInt) {
+            return Ok(MemoryLocation::Lit(input.parse()?));
+        }
+
+        Err(syn::Error::new(
+            input.span(),
+            "expected ident, literal, or const expression",
+        ))
+    }
+}
+
 /// Holds the identitiy, numeric type representation, and regions.
 struct Struct {
     ident: syn::Ident,
     repr: syn::Type,
+    default_loc: Option<MemoryLocation>,
     fields: syn::punctuated::Punctuated<Field, syn::Token![,]>,
 }
 
@@ -46,6 +74,12 @@ impl syn::parse::Parse for Struct {
         // grab the identity and "C" representation
         let ident: syn::Ident = input.parse()?;
         let repr: syn::Type = input.parse()?;
+
+        let mut default_loc = None;
+        if input.peek(syn::token::At) {
+            let _: syn::token::At = input.parse()?;
+            default_loc = Some(input.parse()?);
+        }
 
         // extract everything wrapped in the braces
         // also collect a region per parsed field
@@ -78,6 +112,7 @@ impl syn::parse::Parse for Struct {
         Ok(Struct {
             ident,
             repr,
+            default_loc,
             fields,
         })
     }
@@ -103,15 +138,20 @@ impl Field {
     }
 
     /// Generate the Display printer for this field.
-    /// Should push to a Vec variable named result.
     pub fn gen_display(&self) -> quote::__rt::TokenStream {
         let name = &self.name;
         let lower = &self.lower_name;
         if self.region.len() == 1 {
-            quote! { if self.#lower() { result.push(stringify!(#name).to_string()); } }
+            quote! {
+                if self.#lower() {
+                    if is_first { is_first = false; } else { write!(f, " | ")?; }
+                    write!(f, stringify!(#name))?;
+                }
+            }
         } else {
             quote! {
-                result.push(format!("{}={:#X}", stringify!(#name), self.#lower()));
+                if is_first { is_first = false; } else { write!(f, " | ")?; }
+                write!(f, "{}={:#X}", stringify!(#name), self.#lower())?;
             }
         }
     }
@@ -316,6 +356,20 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         quote! { const #mask: #repr = #val; }
     }).collect::<Vec<quote::__rt::TokenStream>>();
 
+    // generate token stream for (optional) default
+    let default = input.struct_def.default_loc.map(|m| {
+        let expr = match m {
+            MemoryLocation::Ident(i) => { quote! { #i } },
+            MemoryLocation::Lit(l) => { quote! { #l } },
+            MemoryLocation::Expr(e) => { quote! { #e } },
+        };
+        quote!{
+            pub unsafe fn default_ptr() -> &'static mut Self {
+                Self::at_addr_mut(#expr)
+            }
+        }
+    });
+
     // generate token streams for the methods
     let mask_ops = input.struct_def.fields.iter().map(|f| f.gen_ops(name, repr))
         .collect::<Vec<quote::__rt::TokenStream>>();
@@ -326,16 +380,16 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     // make display and debug impls
     let display_debug = quote! {
-        impl std::fmt::Display for #name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mut result: Vec<String> = vec!();
+        impl core::fmt::Display for #name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut is_first = true;
                 #( #display_ops )*
-                write!(f, "{}", result.join(" | "))
+                Ok(())
             }
         }
 
-        impl std::fmt::Debug for #name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl core::fmt::Debug for #name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(f, "{:#X}", self.0)
             }
         }
@@ -370,6 +424,8 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 &mut *(r as *mut T as *mut #name)
             }
 
+            #default
+
             pub fn raw(&self) -> #repr {
                 self.0
             }
@@ -396,13 +452,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // add
         //
-        impl std::ops::Add for #name {
+        impl core::ops::Add for #name {
             type Output = Self;
             fn add(self, other: Self) -> Self::Output {
                 #name(self.0 + other.0)
             }
         }
-        impl std::ops::AddAssign for #name {
+        impl core::ops::AddAssign for #name {
             fn add_assign(&mut self, other: Self) {
                 self.0 += other.0;
             }
@@ -411,13 +467,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // sub
         //
-        impl std::ops::Sub for #name {
+        impl core::ops::Sub for #name {
             type Output = Self;
             fn sub(self, other: Self) -> Self::Output {
                 #name(self.0 - other.0)
             }
         }
-        impl std::ops::SubAssign for #name {
+        impl core::ops::SubAssign for #name {
             fn sub_assign(&mut self, other: Self) {
                 self.0 -= other.0;
             }
@@ -426,13 +482,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // mul
         //
-        impl std::ops::Mul for #name {
+        impl core::ops::Mul for #name {
             type Output = Self;
             fn mul(self, other: Self) -> Self::Output {
                 #name(self.0 * other.0)
             }
         }
-        impl std::ops::MulAssign for #name {
+        impl core::ops::MulAssign for #name {
             fn mul_assign(&mut self, other: Self) {
                 self.0 *= other.0;
             }
@@ -441,13 +497,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // div
         //
-        impl std::ops::Div for #name {
+        impl core::ops::Div for #name {
             type Output = Self;
             fn div(self, other: Self) -> Self::Output {
                 #name(self.0 / other.0)
             }
         }
-        impl std::ops::DivAssign for #name {
+        impl core::ops::DivAssign for #name {
             fn div_assign(&mut self, other: Self) {
                 self.0 /= other.0;
             }
@@ -456,13 +512,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // bitor
         //
-        impl std::ops::BitOr for #name {
+        impl core::ops::BitOr for #name {
             type Output = Self;
             fn bitor(self, other: Self) -> Self::Output {
                 #name(self.0 | other.0)
             }
         }
-        impl std::ops::BitOrAssign for #name {
+        impl core::ops::BitOrAssign for #name {
             fn bitor_assign(&mut self, other: Self) {
                 self.0 |= other.0;
             }
@@ -471,13 +527,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // bitand
         //
-        impl std::ops::BitAnd for #name {
+        impl core::ops::BitAnd for #name {
             type Output = Self;
             fn bitand(self, other: Self) -> Self::Output {
                 #name(self.0 & other.0)
             }
         }
-        impl std::ops::BitAndAssign for #name {
+        impl core::ops::BitAndAssign for #name {
             fn bitand_assign(&mut self, other: Self) {
                 self.0 &= other.0;
             }
@@ -487,13 +543,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // bitxor
         //
-        impl std::ops::BitXor for #name {
+        impl core::ops::BitXor for #name {
             type Output = Self;
             fn bitxor(self, other: Self) -> Self::Output {
                 #name(self.0 ^ other.0)
             }
         }
-        impl std::ops::BitXorAssign for #name {
+        impl core::ops::BitXorAssign for #name {
             fn bitxor_assign(&mut self, other: Self) {
                 self.0 ^= other.0;
             }
@@ -502,13 +558,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // shr
         //
-        impl std::ops::Shr for #name {
+        impl core::ops::Shr for #name {
             type Output = Self;
             fn shr(self, other: Self) -> Self::Output {
                 #name(self.0 >> other.0)
             }
         }
-        impl std::ops::ShrAssign for #name {
+        impl core::ops::ShrAssign for #name {
             fn shr_assign(&mut self, other: Self) {
                 self.0 >>= other.0;
             }
@@ -517,13 +573,13 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         //
         // shl
         //
-        impl std::ops::Shl for #name {
+        impl core::ops::Shl for #name {
             type Output = Self;
             fn shl(self, other: Self) -> Self::Output {
                 #name(self.0 << other.0)
             }
         }
-        impl std::ops::ShlAssign for #name {
+        impl core::ops::ShlAssign for #name {
             fn shl_assign(&mut self, other: Self) {
                 self.0 <<= other.0;
             }
