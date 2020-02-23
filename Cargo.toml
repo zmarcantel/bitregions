@@ -3,9 +3,12 @@ name = "bitregions"
 version = "0.1.0"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
 edition = "2018"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/zmarcantel/bitregions"
+readme = "README.md"
+keywords = ["ffi", "bitflags", "embedded", "bits"]
 
 [dependencies]
-bitflags = "^1.2.1"
 proc-macro-hack = "^0.5.11"
 bitregions-impl = { version = "0.1.0", path = "./impl" }
 

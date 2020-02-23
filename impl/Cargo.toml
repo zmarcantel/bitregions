@@ -3,6 +3,9 @@ name = "bitregions-impl"
 version = "0.1.0"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
 edition = "2018"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/zmarcantel/bitregions"
+keywords = ["ffi", "bitflags", "embedded", "bits"]
 
 [lib]
 proc-macro = true
