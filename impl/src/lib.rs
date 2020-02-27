@@ -254,7 +254,7 @@ impl Field {
             quote! { (#(#as_str, )*) }
         };
         let tuple_result = (0..region_len).enumerate().rev()
-            .map(|(i, _)| quote!{(val >> #i) & 1}).collect::<Vec<quote::__rt::TokenStream>>();
+            .map(|(i, _)| quote!{if (val >> #i) & 1 == 1 { 1u8 } else { 0u8 }}).collect::<Vec<quote::__rt::TokenStream>>();
 
         let shift_offset = self.region.shift_offset();
         let value_assert = format!(

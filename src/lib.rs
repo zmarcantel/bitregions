@@ -327,6 +327,14 @@ mod test {
         }
     }
 
+    bitregions! {
+        pub WideRegionTest u32 @ DEFAULT_ADDR_CONST + 0x80 {
+            BITS6:     0b00000000000000000000000000111111,
+            BITS10:    0b00000000000000011111111110000000,
+            BITS15:    0b11111111111111100000000000000000,
+        }
+    }
+
     // TODO: test overlap funcs
     // TODO: should_panic tests around generation?
     /*
@@ -658,5 +666,33 @@ mod test {
     fn default_ptr_expr() {
         let ptr = unsafe { DefaultExprAddrTest::default_ptr() };
         assert_eq!(ptr as *mut _ as usize, DEFAULT_ADDR_CONST + 0x80);
+    }
+
+    #[test]
+    fn wide_region_getters() {
+        let mut test = WideRegionTest::new(0u32);
+        test.set_bits6(10u8);
+        test.set_bits10(1023u16);
+        test.set_bits15(1234u16);
+
+        let bits6: u8 = test.bits6();
+        assert_eq!(bits6, 10u8);
+
+        let bits10: u16 = test.bits10();
+        assert_eq!(bits10, 1023u16);
+
+        let bits15: u16 = test.bits15();
+        assert_eq!(bits15, 1234u16);
+    }
+
+    #[test]
+    fn wide_region_tuples() {
+        let mut test = WideRegionTest::new(0u32);
+        test.set_bits6(10u8);
+        test.set_bits10(1023u16);
+        test.set_bits15(1234u16);
+
+        assert_eq!(test.bits6_tuple(), (0,0,1,0,1,0));
+        assert_eq!(test.bits6_bools(), (false,false,true,false,true,false));
     }
 }
