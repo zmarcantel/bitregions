@@ -236,6 +236,26 @@ impl Field {
         let set = format_ident!("set_{}", lower);
         let extract = format_ident!("extract_{}", lower);
 
+        let lower_tuple = format_ident!("{}_tuple", lower);
+        let lower_bools = format_ident!("{}_bools", lower);
+        let region_len = self.region.len();
+
+        let bools_repr = {
+            let as_str = (0..region_len)
+                .map(|_| quote!{bool}).collect::<Vec<quote::__rt::TokenStream>>();
+            quote! { (#(#as_str, )*) }
+        };
+        let bools_result = (0..region_len).enumerate().rev()
+            .map(|(i, _)| quote!{(val >> #i) & 1 == 1}).collect::<Vec<quote::__rt::TokenStream>>();
+
+        let tuple_repr = {
+            let as_str = (0..region_len)
+                .map(|_| quote!{u8}).collect::<Vec<quote::__rt::TokenStream>>();
+            quote! { (#(#as_str, )*) }
+        };
+        let tuple_result = (0..region_len).enumerate().rev()
+            .map(|(i, _)| quote!{(val >> #i) & 1}).collect::<Vec<quote::__rt::TokenStream>>();
+
         let shift_offset = self.region.shift_offset();
         let value_assert = format!(
             "attempted to set {}::{} with value outside of region: {{:#X}}",
@@ -248,6 +268,14 @@ impl Field {
                 debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
         });
 
+        let value_repr = match self.region.len() {
+            0..=8   => { quote! { u8 } }
+            9..=16  => { quote! { u16 } }
+            17..=32 => { quote! { u32 } }
+            33..=64 => { quote! { u64 } }
+            _       => { quote! { usize } }
+        };
+
         let (upshift, downshift) = if self.region.shift_offset() > 0 {
             (Some(quote!{ << #shift_offset }),
              Some(quote!{ >> #shift_offset }))
@@ -256,8 +284,16 @@ impl Field {
         };
 
         let getters = quote! {
-            pub fn #lower(&self) -> #repr {
-                (self.0 & #struct_name::#mask) #downshift
+            pub fn #lower(&self) -> #value_repr {
+                ((self.0 & #struct_name::#mask) #downshift) as #value_repr
+            }
+            pub fn #lower_tuple(&self) -> #tuple_repr {
+                let val = self.#lower();
+                (#(#tuple_result, )*)
+            }
+            pub fn #lower_bools(&self) -> #bools_repr {
+                let val = self.#lower();
+                (#(#bools_result, )*)
             }
             pub fn #extract(&self) -> #struct_name {
                 #struct_name(self.0 & #struct_name::#mask)

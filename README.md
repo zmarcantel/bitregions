@@ -4,6 +4,7 @@ bitregions
 [![docs.rs/bitregions](https://docs.rs/bitregions/badge.svg)](https://docs.rs/bitregions)
 [![Build Status](https://travis-ci.org/zmarcantel/bitregions.svg?branch=master)](https://travis-ci.org/zmarcantel/bitregions)
 
+
 Generate a unit structure to represent a set of bit-regions.
 Intended to be used both as bitflags held in structs/collections as well
 as representing something like a memory-mapped register in more embedded
@@ -31,19 +32,14 @@ The following traits are generated for the new struct:
 - `|` and `|=`
 - `&` and `&=`
 
-
-Examples
-=================
-
-
-Basic Example:
------------------
+Basic Example
+----------------
 
 Example purely to show the API.
 Creates a stack-based u16 unit-struct with helper methods.
 
 ```rust
-# #[macro_use] extern crate bitregions;
+#[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 {
         EN_FEATURE:   0b0000000000000001,
@@ -91,7 +87,7 @@ fn main() {
     // read the value out of the buffer (pre-shifted for you)
     // then, assert the shift happened correctly by looking at the
     // unshifted version returned by the extract_{field} variant.
-    let resp = ex.val_buffer();
+    let resp = ex.val_buffer() as u16;
     assert_eq!(resp << 8, ex.extract_val_buffer().raw());
 
     // disable the feature this register governs
@@ -122,12 +118,38 @@ fn main() {
 
     let debug = format!("{:?}", ex);
     assert_eq!(debug, "0xAB11");
+
+
+    //
+    // get region as a tuple
+    //
+
+    // as a tuple of u8 e.g. (u8, u8, u8) for port_num
+    let tup = ex.port_num_tuple();
+    assert_eq!(
+        ex.port_num(),
+        match tup {
+            (0,0,0) => { 0 }
+            (0,0,1) => { 1 }
+            (0,1,0) => { 2 }
+            (0,1,1) => { 3 }
+            (1,0,0) => { 4 }
+            (1,0,1) => { 5 }
+            _ => { 0xFF }
+        },
+        "got {:?}, but expected {:b}", tup, ex.port_num(),
+    );
+
+    // or as a tuple of booleans e.g. (bool, bool, bool) for port_num
+    let bools = ex.port_num_bools();
+    if bools.1 {
+        // the second bit in the port number is set
+    }
 }
 ```
 
-
-Memory-mapped Example:
-------------------------
+Memory-mapped Example
+---------------------------
 
 A common case for bitmaps/bitflags/etc are memory-mapped registers.
 Below is an example that creates a lifetimed reference to some memory
@@ -137,7 +159,7 @@ You can optionally provide a default address location using the
 `{name} {repr} @ {addr}` syntax. This variant returns a static, mutable ref.
 
 ```rust
-# #[macro_use] extern crate bitregions;
+#[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 @ 0xDEADBEEF {
         EN_FEATURE:   0b0000000000000001,
@@ -190,10 +212,8 @@ fn main() {
 }
 ```
 
-
-
-From Reference Example:
----------------------------
+From Reference Example
+--------------------------
 
 Below is an example which casts a reference of the region's underlying
 type to our generated struct. This allows you to "add features" to a raw
@@ -201,7 +221,7 @@ value. While safer than the memory-mapped example but is still unsafe code
 as you could share a reference into a slice.
 
 ```rust
-# #[macro_use] extern crate bitregions;
+#[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u16 {
         EN_FEATURE:   0b0000000000000001,
@@ -233,16 +253,15 @@ fn main() {
 ```
 
 
-
 Debug Assertions
-----------------------
+---------------------
 
 When built in debug-mode, setters will assert the given value
 both fits in the region (4bit number in 2bit region) and is within
 the (optional) range (3bit region, 0-5 allowed, given 7).
 
 ```rust
-# #[macro_use] extern crate bitregions;
+#[macro_use] extern crate bitregions;
 bitregions! {
     pub Example u8 {
         RANGED:     0b00011100 | 1..=6,
@@ -269,5 +288,4 @@ fn main() {
     ex.set_non_ranged(8u8); // will panic do to region violation
 }
 ```
-
 

@@ -87,7 +87,7 @@
 ///     // read the value out of the buffer (pre-shifted for you)
 ///     // then, assert the shift happened correctly by looking at the
 ///     // unshifted version returned by the extract_{field} variant.
-///     let resp = ex.val_buffer();
+///     let resp = ex.val_buffer() as u16;
 ///     assert_eq!(resp << 8, ex.extract_val_buffer().raw());
 ///
 ///     // disable the feature this register governs
@@ -118,6 +118,33 @@
 ///
 ///     let debug = format!("{:?}", ex);
 ///     assert_eq!(debug, "0xAB11");
+///
+///
+///     //
+///     // get region as a tuple
+///     //
+///
+///     // as a tuple of u8 e.g. (u8, u8, u8) for port_num
+///     let tup = ex.port_num_tuple();
+///     assert_eq!(
+///         ex.port_num(),
+///         match tup {
+///             (0,0,0) => { 0 }
+///             (0,0,1) => { 1 }
+///             (0,1,0) => { 2 }
+///             (0,1,1) => { 3 }
+///             (1,0,0) => { 4 }
+///             (1,0,1) => { 5 }
+///             _ => { 0xFF }
+///         },
+///         "got {:?}, but expected {:b}", tup, ex.port_num(),
+///     );
+///
+///     // or as a tuple of booleans e.g. (bool, bool, bool) for port_num
+///     let bools = ex.port_num_bools();
+///     if bools.1 {
+///         // the second bit in the port number is set
+///     }
 /// }
 /// ```
 ///
@@ -267,7 +294,7 @@ mod test {
 
     bitregions! {
         pub Test u16 {
-            LOW_REGION:     0b00000111 | 0..=5u16,
+            LOW_REGION:     0b00000111 | 0..=5,
             HIGH_REGION:    0b00011000,
             HIGH_TOGGLE:    0b01000000,
         }
@@ -358,6 +385,38 @@ mod test {
     }
 
     #[test]
+    fn get_low_region_tuple() {
+        let mut test = Test::with_low_region(5u8);
+
+        let mut tup = test.low_region_tuple();
+        assert_eq!(tup, (1,0,1));
+
+        test.set_low_region(1u8);
+        tup = test.low_region_tuple();
+        assert_eq!(tup, (0,0,1));
+
+        test.set_low_region(4u8);
+        tup = test.low_region_tuple();
+        assert_eq!(tup, (1,0,0));
+    }
+
+    #[test]
+    fn get_low_region_bools() {
+        let mut test = Test::with_low_region(5u8);
+
+        let mut bools = test.low_region_bools();
+        assert_eq!(bools, (true,false,true));
+
+        test.set_low_region(1u8);
+        bools = test.low_region_bools();
+        assert_eq!(bools, (false,false,true));
+
+        test.set_low_region(4u8);
+        bools = test.low_region_bools();
+        assert_eq!(bools, (true,false,false));
+    }
+
+    #[test]
     #[should_panic]
     fn set_beyond_low_region() {
         let mut test = Test::from(0);
@@ -382,6 +441,38 @@ mod test {
         assert!(3 == test.low_region());
         test.set_high_region(0u8);
         assert!(0 == test.high_region());
+    }
+
+    #[test]
+    fn get_high_region_tuple() {
+        let mut test = Test::with_high_region(1u8);
+
+        let mut tup = test.high_region_tuple();
+        assert_eq!(tup, (0,1));
+
+        test.set_high_region(3u8);
+        tup = test.high_region_tuple();
+        assert_eq!(tup, (1,1));
+
+        test.set_high_region(0u8);
+        tup = test.high_region_tuple();
+        assert_eq!(tup, (0,0));
+    }
+
+    #[test]
+    fn get_high_region_bools() {
+        let mut test = Test::with_high_region(1u8);
+
+        let mut bools = test.high_region_bools();
+        assert_eq!(bools, (false,true));
+
+        test.set_high_region(3u8);
+        bools = test.high_region_bools();
+        assert_eq!(bools, (true,true));
+
+        test.set_high_region(0u8);
+        bools = test.high_region_bools();
+        assert_eq!(bools, (false,false));
     }
 
     #[test]
