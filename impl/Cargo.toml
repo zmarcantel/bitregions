@@ -1,6 +1,6 @@
 [package]
 name = "bitregions-impl"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
 description = "implementation for the bitregions crate"
 edition = "2018"
@@ -14,4 +14,4 @@ proc-macro = true
 [dependencies]
 syn = { version = "^1.0.8", features = ["full"] }
 quote = "^1.0.2"
-proc-macro-hack = "^0.5.11"
+proc-macro2 = "^1.0.9"

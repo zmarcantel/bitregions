@@ -8,6 +8,7 @@ extern crate proc_macro;
 
 #[macro_use]
 extern crate quote;
+use quote::ToTokens;
 
 
 /// Wrapper type for the visibility of the generated struct
@@ -131,7 +132,7 @@ struct Field {
 impl Field {
     /// Generate the operations on this field.
     pub fn gen_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> quote::__rt::TokenStream
+        -> proc_macro2::TokenStream
     {
         if self.region.len() == 1 {
             self.gen_single_bit_ops(struct_name)
@@ -142,13 +143,13 @@ impl Field {
 
     /// Generate the "with_{name}" constructor
     pub fn gen_with_ctor(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> quote::__rt::TokenStream
+        -> proc_macro2::TokenStream
     {
         let name = &self.name;
         let lower = &self.lower_name;
         let with_fn = format_ident!("with_{}", lower);
         let set_call = format_ident!("set_{}", lower);
-        if self.region.len() == 1 {
+        proc_macro2::TokenStream::from(if self.region.len() == 1 {
             quote! {
                 pub fn #with_fn() -> #struct_name {
                     #struct_name::new(#struct_name::#name)
@@ -162,14 +163,14 @@ impl Field {
                     r
                 }
             }
-        }
+        })
     }
 
     /// Generate the Display printer for this field.
-    pub fn gen_display(&self) -> quote::__rt::TokenStream {
+    pub fn gen_display(&self) -> proc_macro2::TokenStream {
         let name = &self.name;
         let lower = &self.lower_name;
-        if self.region.len() == 1 {
+        proc_macro2::TokenStream::from(if self.region.len() == 1 {
             quote! {
                 if self.#lower() {
                     if is_first { is_first = false; } else { write!(f, " | ")?; }
@@ -181,13 +182,13 @@ impl Field {
                 if is_first { is_first = false; } else { write!(f, " | ")?; }
                 write!(f, "{}={:#X}", stringify!(#name), self.#lower())?;
             }
-        }
+        })
     }
 
     /// Generates methods to operate on single-bit regions.
     /// Setter methods do not take values and includes a toggle method.
     fn gen_single_bit_ops(&self, struct_name: &syn::Ident)
-        -> quote::__rt::TokenStream
+        -> proc_macro2::TokenStream
     {
         let mask = format_ident!("{}", self.name);
         let lower = &self.lower_name;
@@ -218,17 +219,17 @@ impl Field {
             }
         };
 
-        quote!{
+        proc_macro2::TokenStream::from(quote!{
             #getters
             #setters
-        }
+        })
     }
 
     /// Generates methods to operate on multi-bit regions.
     /// Setter methods take values and include debug_assert! calls for both
     /// bit-region as well as the optional value-range.
     fn gen_region_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> quote::__rt::TokenStream
+        -> proc_macro2::TokenStream
     {
         let mask = format_ident!("{}", self.name);
         let lower = &self.lower_name;
@@ -240,21 +241,15 @@ impl Field {
         let lower_bools = format_ident!("{}_bools", lower);
         let region_len = self.region.len();
 
-        let bools_repr = {
-            let as_str = (0..region_len)
-                .map(|_| quote!{bool}).collect::<Vec<quote::__rt::TokenStream>>();
-            quote! { (#(#as_str, )*) }
-        };
+        let bools_repr = (0..region_len).map(|_| quote!{bool}.into()).collect::<Vec<proc_macro2::TokenStream>>();
         let bools_result = (0..region_len).enumerate().rev()
-            .map(|(i, _)| quote!{(val >> #i) & 1 == 1}).collect::<Vec<quote::__rt::TokenStream>>();
+            .map(|(i, _)| quote!{(val >> #i) & 1 == 1}.into())
+            .collect::<Vec<proc_macro2::TokenStream>>();
 
-        let tuple_repr = {
-            let as_str = (0..region_len)
-                .map(|_| quote!{u8}).collect::<Vec<quote::__rt::TokenStream>>();
-            quote! { (#(#as_str, )*) }
-        };
+        let tuple_repr = (0..region_len).map(|_| quote!{u8}.into()).collect::<Vec<proc_macro2::TokenStream>>();
         let tuple_result = (0..region_len).enumerate().rev()
-            .map(|(i, _)| quote!{if (val >> #i) & 1 == 1 { 1u8 } else { 0u8 }}).collect::<Vec<quote::__rt::TokenStream>>();
+            .map(|(i, _)| quote!{((val >> #i) & 1) as u8}.into())
+            .collect::<Vec<proc_macro2::TokenStream>>();
 
         let shift_offset = self.region.shift_offset();
         let value_assert = format!(
@@ -265,7 +260,7 @@ impl Field {
             "attempted to set {}::{} with value outside of range ({{:?}}): {{:#X}}",
             struct_name, self.name);
         let range_check = self.region.range.as_ref().map(|ref e| quote! {
-                debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
+            debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
         });
 
         let value_repr = match self.region.len() {
@@ -287,13 +282,13 @@ impl Field {
             pub fn #lower(&self) -> #value_repr {
                 ((self.0 & #struct_name::#mask) #downshift) as #value_repr
             }
-            pub fn #lower_tuple(&self) -> #tuple_repr {
+            pub fn #lower_tuple(&self) -> (#(#tuple_repr),*) {
                 let val = self.#lower();
-                (#(#tuple_result, )*)
+                (#(#tuple_result),*)
             }
-            pub fn #lower_bools(&self) -> #bools_repr {
+            pub fn #lower_bools(&self) -> (#(#bools_repr),*) {
                 let val = self.#lower();
-                (#(#bools_result, )*)
+                (#(#bools_result),*)
             }
             pub fn #extract(&self) -> #struct_name {
                 #struct_name(self.0 & #struct_name::#mask)
@@ -313,10 +308,10 @@ impl Field {
             }
         };
 
-        quote!{
+        (quote!{
             #getters
             #setters
-        }
+        }).into()
     }
 }
 
@@ -437,8 +432,8 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mask_defs = input.struct_def.fields.iter().map(|f| {
         let val = &f.region.lit;
         let mask = &f.name;
-        quote! { pub const #mask: #repr = #val; }
-    }).collect::<Vec<quote::__rt::TokenStream>>();
+        (quote! { pub const #mask: #repr = #val; }).into()
+    }).collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token stream for (optional) default
     let default = input.struct_def.default_loc.map(|m| {
@@ -456,15 +451,15 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     // generate token streams for the "with_{field}" constructors
     let with_ctors = input.struct_def.fields.iter().map(|f| f.gen_with_ctor(name, repr))
-        .collect::<Vec<quote::__rt::TokenStream>>();
+        .collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token streams for the methods
     let mask_ops = input.struct_def.fields.iter().map(|f| f.gen_ops(name, repr))
-        .collect::<Vec<quote::__rt::TokenStream>>();
+        .collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token streams for the field Display impls
     let display_ops = input.struct_def.fields.iter().map(|f| f.gen_display())
-        .collect::<Vec<quote::__rt::TokenStream>>();
+        .collect::<Vec<proc_macro2::TokenStream>>();
 
     // make display and debug impls
     let display_debug = quote! {
