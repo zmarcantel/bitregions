@@ -1,6 +1,6 @@
 [package]
 name = "bitregions"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
 description = "Generate a unit structure to represent a set of bit-regions."
 edition = "2018"
@@ -10,8 +10,7 @@ readme = "README.md"
 keywords = ["ffi", "bitflags", "embedded", "bits"]
 
 [dependencies]
-proc-macro2 = "^1.0.9"
-bitregions-impl = { version = "0.2.2", path = "./impl" }
+bitregions-impl = { version = "0.2.3", path = "./impl" }
 
 [workspace]
 members = [

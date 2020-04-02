@@ -8,7 +8,6 @@ extern crate proc_macro;
 
 #[macro_use]
 extern crate quote;
-use quote::ToTokens;
 
 
 /// Wrapper type for the visibility of the generated struct
@@ -345,7 +344,7 @@ struct Region {
 impl Region {
     /// Minimum number of bits needed to represent the mask literal
     pub fn min_value_bits(&self) -> usize {
-        (std::mem::size_of::<usize>()*8) - (self.value.leading_zeros() as usize) - 1
+        (core::mem::size_of::<usize>()*8) - (self.value.leading_zeros() as usize) - 1
     }
 
     /// Number of bits in the region
