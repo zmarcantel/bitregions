@@ -363,6 +363,15 @@ mod test {
     */
 
     #[test]
+    fn default_impl() {
+        assert_eq!(Test::default().raw(), 0);
+        assert_eq!(DefaultLitAddrTest::default().raw(), 0);
+        assert_eq!(DefaultConstAddrTest::default().raw(), 0);
+        assert_eq!(DefaultExprAddrTest::default().raw(), 0);
+        assert_eq!(WideRegionTest::default().raw(), 0);
+    }
+
+    #[test]
     fn with_ctors() {
         assert_eq!(Test::with_high_toggle(), Test::HIGH_TOGGLE.into());
         assert_eq!(Test::with_low_region(4u8), Test::new(4u16));

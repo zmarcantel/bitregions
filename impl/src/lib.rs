@@ -535,6 +535,11 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 self.0 == other.0
             }
         }
+        impl Default for #name {
+            fn default() -> Self {
+                #name(#repr::default())
+            }
+        }
 
         //
         // add
