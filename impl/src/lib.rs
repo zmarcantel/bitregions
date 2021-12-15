@@ -9,7 +9,6 @@ extern crate proc_macro;
 #[macro_use]
 extern crate quote;
 
-
 /// Wrapper type for the visibility of the generated struct
 /// and the parsed syntax defining the regions.
 struct BitRegions {
@@ -29,7 +28,7 @@ impl syn::parse::Parse for BitRegions {
         let struct_def: Struct = input.parse()?;
         let user_fns: UserFns = input.parse()?;
 
-        Ok(BitRegions{
+        Ok(BitRegions {
             vis: vis,
             struct_def,
             user_fns,
@@ -89,22 +88,25 @@ impl syn::parse::Parse for Struct {
         let content;
         let _: syn::token::Brace = syn::braced!(content in input);
         let fields = content.parse_terminated(Field::parse)?;
-        let regions = fields.iter().map(|f| f.region.clone())
+        let regions = fields
+            .iter()
+            .map(|f| f.region.clone())
             .collect::<Vec<Region>>();
 
         // check for intersections
         for (i, r) in regions.iter().enumerate() {
             // check all entries we haven't been checked against
-            for k in (i+1)..regions.len() {
+            for k in (i + 1)..regions.len() {
                 let other = &regions[k];
 
                 if r.intersects(other) {
-                    let oth_err = syn::Error::new(
-                        other.lit.span(), "other region");
+                    let oth_err = syn::Error::new(other.lit.span(), "other region");
                     let mut err = syn::Error::new(
                         r.lit.span(),
-                        format!("0b{:b} intersected by other region 0b{:b}",
-                            r.value, other.value),
+                        format!(
+                            "0b{:b} intersected by other region 0b{:b}",
+                            r.value, other.value
+                        ),
                     );
                     err.combine(oth_err);
                     return Err(err);
@@ -121,7 +123,6 @@ impl syn::parse::Parse for Struct {
     }
 }
 
-
 /// Syntax representation of a region with a name and bit-region.
 struct Field {
     name: syn::Ident,
@@ -130,9 +131,7 @@ struct Field {
 }
 impl Field {
     /// Generate the operations on this field.
-    pub fn gen_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> proc_macro2::TokenStream
-    {
+    pub fn gen_ops(&self, struct_name: &syn::Ident, repr: &syn::Type) -> proc_macro2::TokenStream {
         if self.region.len() == 1 {
             self.gen_single_bit_ops(struct_name)
         } else {
@@ -141,9 +140,11 @@ impl Field {
     }
 
     /// Generate the "with_{name}" constructor
-    pub fn gen_with_ctor(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> proc_macro2::TokenStream
-    {
+    pub fn gen_with_ctor(
+        &self,
+        struct_name: &syn::Ident,
+        repr: &syn::Type,
+    ) -> proc_macro2::TokenStream {
         let name = &self.name;
         let lower = &self.lower_name;
         let with_fn = format_ident!("with_{}", lower);
@@ -186,9 +187,7 @@ impl Field {
 
     /// Generates methods to operate on single-bit regions.
     /// Setter methods do not take values and includes a toggle method.
-    fn gen_single_bit_ops(&self, struct_name: &syn::Ident)
-        -> proc_macro2::TokenStream
-    {
+    fn gen_single_bit_ops(&self, struct_name: &syn::Ident) -> proc_macro2::TokenStream {
         let mask = format_ident!("{}", self.name);
         let lower = &self.lower_name;
 
@@ -218,7 +217,7 @@ impl Field {
             }
         };
 
-        proc_macro2::TokenStream::from(quote!{
+        proc_macro2::TokenStream::from(quote! {
             #getters
             #setters
         })
@@ -227,9 +226,11 @@ impl Field {
     /// Generates methods to operate on multi-bit regions.
     /// Setter methods take values and include debug_assert! calls for both
     /// bit-region as well as the optional value-range.
-    fn gen_region_ops(&self, struct_name: &syn::Ident, repr: &syn::Type)
-        -> proc_macro2::TokenStream
-    {
+    fn gen_region_ops(
+        &self,
+        struct_name: &syn::Ident,
+        repr: &syn::Type,
+    ) -> proc_macro2::TokenStream {
         let mask = format_ident!("{}", self.name);
         let lower = &self.lower_name;
 
@@ -240,39 +241,63 @@ impl Field {
         let lower_bools = format_ident!("{}_bools", lower);
         let region_len = self.region.len();
 
-        let bools_repr = (0..region_len).map(|_| quote!{bool}.into()).collect::<Vec<proc_macro2::TokenStream>>();
-        let bools_result = (0..region_len).enumerate().rev()
-            .map(|(i, _)| quote!{(val >> #i) & 1 == 1}.into())
+        let bools_repr = (0..region_len)
+            .map(|_| quote! {bool}.into())
+            .collect::<Vec<proc_macro2::TokenStream>>();
+        let bools_result = (0..region_len)
+            .enumerate()
+            .rev()
+            .map(|(i, _)| quote! {(val >> #i) & 1 == 1}.into())
             .collect::<Vec<proc_macro2::TokenStream>>();
 
-        let tuple_repr = (0..region_len).map(|_| quote!{u8}.into()).collect::<Vec<proc_macro2::TokenStream>>();
-        let tuple_result = (0..region_len).enumerate().rev()
-            .map(|(i, _)| quote!{((val >> #i) & 1) as u8}.into())
+        let tuple_repr = (0..region_len)
+            .map(|_| quote! {u8}.into())
+            .collect::<Vec<proc_macro2::TokenStream>>();
+        let tuple_result = (0..region_len)
+            .enumerate()
+            .rev()
+            .map(|(i, _)| quote! {((val >> #i) & 1) as u8}.into())
             .collect::<Vec<proc_macro2::TokenStream>>();
 
         let shift_offset = self.region.shift_offset();
         let value_assert = format!(
             "attempted to set {}::{} with value outside of region: {{:#X}}",
-            struct_name, self.name);
+            struct_name, self.name
+        );
 
         let range_assert = format!(
             "attempted to set {}::{} with value outside of range ({{:?}}): {{:#X}}",
-            struct_name, self.name);
-        let range_check = self.region.range.as_ref().map(|ref e| quote! {
-            debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
+            struct_name, self.name
+        );
+        let range_check = self.region.range.as_ref().map(|ref e| {
+            quote! {
+                debug_assert!((#e).contains(&typed), #range_assert, (#e), typed);
+            }
         });
 
         let value_repr = match self.region.len() {
-            0..=8   => { quote! { u8 } }
-            9..=16  => { quote! { u16 } }
-            17..=32 => { quote! { u32 } }
-            33..=64 => { quote! { u64 } }
-            _       => { quote! { usize } }
+            0..=8 => {
+                quote! { u8 }
+            }
+            9..=16 => {
+                quote! { u16 }
+            }
+            17..=32 => {
+                quote! { u32 }
+            }
+            33..=64 => {
+                quote! { u64 }
+            }
+            _ => {
+                quote! { usize }
+            }
         };
 
         let (upshift, downshift) = if self.region.shift_offset() > 0 {
-            (Some(quote!{ << #shift_offset }),
-             Some(quote!{ >> #shift_offset }))
+            (
+                Some(quote! { << #shift_offset }),
+                Some(quote! { >> #shift_offset }),
+            )
         } else {
             (None, None)
         };
@@ -307,10 +332,11 @@ impl Field {
             }
         };
 
-        (quote!{
+        (quote! {
             #getters
             #setters
-        }).into()
+        })
+        .into()
     }
 }
 
@@ -325,13 +351,18 @@ impl syn::parse::Parse for Field {
         // check for gaps
         if region.has_gaps() {
             return Err(syn::Error::new(
-                region.lit.span(), "region cannot contain gap(s)"));
+                region.lit.span(),
+                "region cannot contain gap(s)",
+            ));
         }
 
-        Ok(Field { name, lower_name, region })
+        Ok(Field {
+            name,
+            lower_name,
+            region,
+        })
     }
 }
-
 
 /// Region contains metadata about a bit-region including the literal
 /// expression, the mask, and a range if defined.
@@ -344,7 +375,7 @@ struct Region {
 impl Region {
     /// Minimum number of bits needed to represent the mask literal
     pub fn min_value_bits(&self) -> usize {
-        (core::mem::size_of::<usize>()*8) - (self.value.leading_zeros() as usize) - 1
+        (core::mem::size_of::<usize>() * 8) - (self.value.leading_zeros() as usize) - 1
     }
 
     /// Number of bits in the region
@@ -383,7 +414,10 @@ impl Region {
 impl syn::parse::Parse for Region {
     fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
         let lit: syn::LitInt = input.parse()?;
-        let value = lit.base10_digits().parse().expect("failed to parse literal");
+        let value = lit
+            .base10_digits()
+            .parse()
+            .expect("failed to parse literal");
 
         let mut range = None;
         if input.peek(syn::Token![|]) {
@@ -391,14 +425,9 @@ impl syn::parse::Parse for Region {
             range = Some(input.parse()?);
         }
 
-        Ok(Region {
-            lit,
-            value,
-            range,
-        })
+        Ok(Region { lit, value, range })
     }
 }
-
 
 struct UserFns {
     fns: Vec<syn::ItemFn>,
@@ -406,18 +435,15 @@ struct UserFns {
 
 impl syn::parse::Parse for UserFns {
     fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        let mut fns = vec!();
+        let mut fns = vec![];
 
         while input.peek(syn::token::Pub) || input.peek(syn::token::Fn) {
             fns.push(input.parse()?);
         }
 
-        Ok(UserFns {
-            fns,
-        })
+        Ok(UserFns { fns })
     }
 }
-
 
 #[proc_macro]
 pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -428,20 +454,31 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let user_fns = &input.user_fns.fns;
 
     // create token streams for the const-defs of the masks
-    let mask_defs = input.struct_def.fields.iter().map(|f| {
-        let val = &f.region.lit;
-        let mask = &f.name;
-        (quote! { pub const #mask: #repr = #val; }).into()
-    }).collect::<Vec<proc_macro2::TokenStream>>();
+    let mask_defs = input
+        .struct_def
+        .fields
+        .iter()
+        .map(|f| {
+            let val = &f.region.lit;
+            let mask = &f.name;
+            (quote! { pub const #mask: #repr = #val; }).into()
+        })
+        .collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token stream for (optional) default
     let default = input.struct_def.default_loc.map(|m| {
         let expr = match m {
-            MemoryLocation::Ident(i) => { quote! { #i } },
-            MemoryLocation::Lit(l) => { quote! { #l } },
-            MemoryLocation::Expr(e) => { quote! { #e } },
+            MemoryLocation::Ident(i) => {
+                quote! { #i }
+            }
+            MemoryLocation::Lit(l) => {
+                quote! { #l }
+            }
+            MemoryLocation::Expr(e) => {
+                quote! { #e }
+            }
         };
-        quote!{
+        quote! {
             pub unsafe fn default_ptr() -> &'static mut Self {
                 Self::at_addr_mut(#expr)
             }
@@ -449,15 +486,27 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     });
 
     // generate token streams for the "with_{field}" constructors
-    let with_ctors = input.struct_def.fields.iter().map(|f| f.gen_with_ctor(name, repr))
+    let with_ctors = input
+        .struct_def
+        .fields
+        .iter()
+        .map(|f| f.gen_with_ctor(name, repr))
         .collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token streams for the methods
-    let mask_ops = input.struct_def.fields.iter().map(|f| f.gen_ops(name, repr))
+    let mask_ops = input
+        .struct_def
+        .fields
+        .iter()
+        .map(|f| f.gen_ops(name, repr))
         .collect::<Vec<proc_macro2::TokenStream>>();
 
     // generate token streams for the field Display impls
-    let display_ops = input.struct_def.fields.iter().map(|f| f.gen_display())
+    let display_ops = input
+        .struct_def
+        .fields
+        .iter()
+        .map(|f| f.gen_display())
         .collect::<Vec<proc_macro2::TokenStream>>();
 
     // make display and debug impls
@@ -519,14 +568,14 @@ pub fn bitregions(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
             #(#mask_ops)*
         }
-        impl Into<#repr> for #name {
-            fn into(self) -> #repr {
-                self.0
+        impl From<#repr> for #name {
+            fn from(orig: #repr) -> #name {
+                Self(orig)
             }
         }
-        impl From<#repr> for #name {
-            fn from(val: #repr) -> Self {
-                Self::new(val)
+        impl From<#name> for #repr {
+            fn from(orig: #name) -> #repr {
+                orig.0
             }
         }
 

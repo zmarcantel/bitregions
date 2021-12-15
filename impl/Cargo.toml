@@ -1,6 +1,6 @@
 [package]
 name = "bitregions-impl"
-version = "0.2.4"
+version = "0.2.5"
 authors = ["Zach Marcantel <zmarcantel@gmail.com>"]
 description = "implementation for the bitregions crate"
 edition = "2018"
